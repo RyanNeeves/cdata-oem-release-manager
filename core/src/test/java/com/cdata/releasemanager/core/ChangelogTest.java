@@ -1,4 +1,4 @@
-package com.cdata.embeddeddrivers.core;
+package com.cdata.releasemanager.core;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;

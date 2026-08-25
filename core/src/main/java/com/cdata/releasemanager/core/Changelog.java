@@ -1,4 +1,4 @@
-package com.cdata.embeddeddrivers.core;
+package com.cdata.releasemanager.core;
 
 import java.util.ArrayList;
 import java.util.List;

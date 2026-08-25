@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "embedded-drivers-tools",
-  "description": "Tools for CData embedded / OEM driver management",
+  "name": "cdata-oem-release-manager",
+  "description": "Tools for working with CData OEM driver releases and changelogs",
   "owner": {
     "name": "Ryan Neeves"
   },
@@ -11,7 +11,7 @@
       "description": "Review CData OEM connector changelogs and discover available releases",
       "source": {
         "source": "github",
-        "repo": "RyanNeeves/embedded-drivers-tools",
+        "repo": "RyanNeeves/cdata-oem-release-manager",
         "ref": "release"
       },
       "category": "developer-tools"

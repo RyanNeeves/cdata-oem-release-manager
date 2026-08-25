@@ -1,4 +1,4 @@
-# embedded-drivers-tools
+# cdata-oem-release-manager
 
 Tools for working with CData embedded / OEM drivers:
 
@@ -20,8 +20,8 @@ Tools for working with CData embedded / OEM drivers:
 No download required — install directly via the plugin marketplace:
 
 ```
-/plugin marketplace add RyanNeeves/embedded-drivers-tools
-/plugin install cdata-changelog-review@embedded-drivers-tools
+/plugin marketplace add RyanNeeves/cdata-oem-release-manager
+/plugin install cdata-changelog-review@cdata-oem-release-manager
 /reload-plugins
 ```
 
@@ -96,8 +96,8 @@ Run `java -jar cdrm.jar --help` or add `--help` to any command for details.
 ### Claude Code
 
 ```
-/plugin uninstall cdata-changelog-review@embedded-drivers-tools
-/plugin marketplace remove embedded-drivers-tools
+/plugin uninstall cdata-changelog-review@cdata-oem-release-manager
+/plugin marketplace remove cdata-oem-release-manager
 /reload-plugins
 ```
 

@@ -1,4 +1,4 @@
-package com.cdata.embeddeddrivers.core;
+package com.cdata.releasemanager.core;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;

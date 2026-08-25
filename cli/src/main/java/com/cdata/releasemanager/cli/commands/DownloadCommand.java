@@ -1,4 +1,4 @@
-package com.cdata.embeddeddrivers.cli.commands;
+package com.cdata.releasemanager.cli.commands;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -15,11 +15,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.cdata.embeddeddrivers.cli.EditionCandidates;
-import com.cdata.embeddeddrivers.core.Edition;
-import com.cdata.embeddeddrivers.core.OemBuildsClient;
-import com.cdata.embeddeddrivers.core.Release;
-import com.cdata.embeddeddrivers.core.RemoteFile;
+import com.cdata.releasemanager.cli.EditionCandidates;
+import com.cdata.releasemanager.core.Edition;
+import com.cdata.releasemanager.core.OemBuildsClient;
+import com.cdata.releasemanager.core.Release;
+import com.cdata.releasemanager.core.RemoteFile;
 
 import picocli.CommandLine.ArgGroup;
 import picocli.CommandLine.Command;

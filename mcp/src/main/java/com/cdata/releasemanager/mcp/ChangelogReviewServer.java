@@ -1,4 +1,4 @@
-package com.cdata.embeddeddrivers.mcp;
+package com.cdata.releasemanager.mcp;
 
 import java.io.FilterInputStream;
 import java.io.IOException;
@@ -14,9 +14,9 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 
-import com.cdata.embeddeddrivers.core.Edition;
-import com.cdata.embeddeddrivers.core.OemBuildsClient;
-import com.cdata.embeddeddrivers.core.Release;
+import com.cdata.releasemanager.core.Edition;
+import com.cdata.releasemanager.core.OemBuildsClient;
+import com.cdata.releasemanager.core.Release;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
@@ -28,7 +28,7 @@ import io.modelcontextprotocol.spec.McpSchema.TextContent;
 
 /**
  * CData Changelog Review — MCP Server.
- * Thin MCP layer over embedded-drivers-core; see README.md for setup.
+ * Thin MCP layer over release-manager-core; see README.md for setup.
  */
 public class ChangelogReviewServer {
 

@@ -1,14 +1,14 @@
-package com.cdata.embeddeddrivers.cli;
+package com.cdata.releasemanager.cli;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 
-import com.cdata.embeddeddrivers.cli.commands.ChangelogCommand;
-import com.cdata.embeddeddrivers.cli.commands.ConnectorsCommand;
-import com.cdata.embeddeddrivers.cli.commands.DownloadCommand;
-import com.cdata.embeddeddrivers.cli.commands.ReleasesCommand;
-import com.cdata.embeddeddrivers.core.Edition;
+import com.cdata.releasemanager.cli.commands.ChangelogCommand;
+import com.cdata.releasemanager.cli.commands.ConnectorsCommand;
+import com.cdata.releasemanager.cli.commands.DownloadCommand;
+import com.cdata.releasemanager.cli.commands.ReleasesCommand;
+import com.cdata.releasemanager.core.Edition;
 
 import picocli.CommandLine;
 import picocli.CommandLine.Command;

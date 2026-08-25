@@ -5,15 +5,15 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>com.cdata.embeddeddrivers</groupId>
-    <artifactId>embedded-drivers-tools</artifactId>
+    <groupId>com.cdata.releasemanager</groupId>
+    <artifactId>cdata-oem-release-manager</artifactId>
     <version>0.1.3</version>
   </parent>
 
-  <artifactId>embedded-drivers-core</artifactId>
+  <artifactId>release-manager-core</artifactId>
   <packaging>jar</packaging>
 
-  <name>Embedded Drivers Core</name>
+  <name>Release Manager Core</name>
   <description>Shared domain logic for CData Embedded / OEM tools: release discovery, connectors, changelogs, and driver downloads.</description>
 
   <dependencies>

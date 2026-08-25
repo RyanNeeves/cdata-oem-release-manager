@@ -4,14 +4,14 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>com.cdata.embeddeddrivers</groupId>
-  <artifactId>embedded-drivers-tools</artifactId>
+  <groupId>com.cdata.releasemanager</groupId>
+  <artifactId>cdata-oem-release-manager</artifactId>
   <version>0.1.3</version>
   <packaging>pom</packaging>
 
-  <name>Embedded Drivers Tools</name>
+  <name>CData OEM Release Manager</name>
   <description>Tools for CData Embedded / OEM driver management: shared core, CLI, and MCP server.</description>
-  <url>https://github.com/RyanNeeves/embedded-drivers-tools</url>
+  <url>https://github.com/RyanNeeves/cdata-oem-release-manager</url>
 
   <licenses>
     <license>
@@ -37,8 +37,8 @@
   <dependencyManagement>
     <dependencies>
       <dependency>
-        <groupId>com.cdata.embeddeddrivers</groupId>
-        <artifactId>embedded-drivers-core</artifactId>
+        <groupId>com.cdata.releasemanager</groupId>
+        <artifactId>release-manager-core</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>

@@ -1,11 +1,11 @@
-package com.cdata.embeddeddrivers.cli.commands;
+package com.cdata.releasemanager.cli.commands;
 
 import java.util.List;
 import java.util.concurrent.Callable;
 
-import com.cdata.embeddeddrivers.cli.EditionCandidates;
-import com.cdata.embeddeddrivers.core.Edition;
-import com.cdata.embeddeddrivers.core.OemBuildsClient;
+import com.cdata.releasemanager.cli.EditionCandidates;
+import com.cdata.releasemanager.core.Edition;
+import com.cdata.releasemanager.core.OemBuildsClient;
 
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;

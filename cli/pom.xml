@@ -5,8 +5,8 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>com.cdata.embeddeddrivers</groupId>
-    <artifactId>embedded-drivers-tools</artifactId>
+    <groupId>com.cdata.releasemanager</groupId>
+    <artifactId>cdata-oem-release-manager</artifactId>
     <version>0.1.3</version>
   </parent>
 
@@ -17,13 +17,13 @@
   <description>Command-line tool for managing releases of CData embedded/OEM drivers.</description>
 
   <properties>
-    <mainClass>com.cdata.embeddeddrivers.cli.RootCommand</mainClass>
+    <mainClass>com.cdata.releasemanager.cli.RootCommand</mainClass>
   </properties>
 
   <dependencies>
     <dependency>
-      <groupId>com.cdata.embeddeddrivers</groupId>
-      <artifactId>embedded-drivers-core</artifactId>
+      <groupId>com.cdata.releasemanager</groupId>
+      <artifactId>release-manager-core</artifactId>
     </dependency>
     <dependency>
       <groupId>info.picocli</groupId>

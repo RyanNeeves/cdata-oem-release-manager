@@ -1,4 +1,4 @@
-package com.cdata.embeddeddrivers.core;
+package com.cdata.releasemanager.core;
 
 import java.io.IOException;
 import java.net.URI;

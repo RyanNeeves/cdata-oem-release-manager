@@ -1,8 +1,8 @@
-package com.cdata.embeddeddrivers.cli;
+package com.cdata.releasemanager.cli;
 
 import java.util.Iterator;
 
-import com.cdata.embeddeddrivers.core.Edition;
+import com.cdata.releasemanager.core.Edition;
 
 /**
  * Supplies edition display names to picocli's ${COMPLETION-CANDIDATES}, so

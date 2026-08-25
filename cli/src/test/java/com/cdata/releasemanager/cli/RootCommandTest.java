@@ -1,4 +1,4 @@
-package com.cdata.embeddeddrivers.cli;
+package com.cdata.releasemanager.cli;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
