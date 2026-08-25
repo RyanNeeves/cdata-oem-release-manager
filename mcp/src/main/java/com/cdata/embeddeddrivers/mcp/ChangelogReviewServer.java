@@ -1,5 +1,9 @@
 package com.cdata.embeddeddrivers.mcp;
 
+import java.io.FilterInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -7,8 +11,9 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
 
-import com.cdata.embeddeddrivers.core.Changelog;
 import com.cdata.embeddeddrivers.core.Edition;
 import com.cdata.embeddeddrivers.core.OemBuildsClient;
 import com.cdata.embeddeddrivers.core.Release;
@@ -29,6 +34,17 @@ public class ChangelogReviewServer {
 
     private static final OemBuildsClient CLIENT = new OemBuildsClient();
 
+    /** The project version, filtered into version.properties by Maven at build time. */
+    private static String version() {
+        Properties props = new Properties();
+        try (InputStream in = ChangelogReviewServer.class.getResourceAsStream("/version.properties")) {
+            if (in != null) props.load(in);
+        } catch (IOException e) {
+            // Fall through to the default.
+        }
+        return props.getProperty("version", "dev");
+    }
+
     // ============================================================
     //  SHARED UTILITIES
     // ============================================================
@@ -45,12 +61,6 @@ public class ChangelogReviewServer {
                 .content(Collections.singletonList((McpSchema.Content) new TextContent(message)))
                 .isError(true)
                 .build();
-    }
-
-    private static List<String> editionDisplayNames() {
-        List<String> names = new ArrayList<>();
-        for (Edition e : Edition.values()) names.add(e.displayName());
-        return names;
     }
 
     // ============================================================
@@ -128,10 +138,11 @@ public class ChangelogReviewServer {
         try {
             List<Release> releases = CLIENT.listReleases();
             if (releases.isEmpty()) return ok("No releases found.");
-            StringBuilder sb = new StringBuilder("Available releases (newest first):\n");
+            StringBuilder sb = new StringBuilder("Latest release: " + releases.get(0).label() + "\n");
+            sb.append("All releases (newest first), with the get_changelog arguments for each:\n");
             for (Release r : releases) {
-                sb.append(String.format("  %s  (major_version: %d, release_number: %d)%n",
-                        r.label(), r.year(), r.releaseNumber()));
+                sb.append(String.format("  %s  (major_version: %d, after_release: \"%du%d\")%n",
+                        r.label(), r.year(), r.year(), r.releaseNumber()));
             }
             return ok(sb.toString().stripTrailing());
         } catch (Exception e) {
@@ -146,7 +157,7 @@ public class ChangelogReviewServer {
 
     private static McpSchema.JsonSchema listConnectorsSchema() {
         Map<String, Object> props = new LinkedHashMap<>();
-        props.put("edition", schemaEnum("Driver edition.", editionDisplayNames()));
+        props.put("edition", schemaEnum("Driver edition.", Edition.displayNames()));
         props.put("major_version", schemaProperty("integer", "Major version year from list_releases (e.g. 2025)."));
         return new McpSchema.JsonSchema("object", props,
                 Arrays.asList("edition", "major_version"), null, null, null);
@@ -165,18 +176,14 @@ public class ChangelogReviewServer {
         List<String> connectors;
         try {
             connectors = CLIENT.listConnectors(edition, majorVersion);
+        } catch (IllegalArgumentException e) {
+            return err(e.getMessage() + " Call list_releases to see available major versions.");
         } catch (Exception e) {
             e.printStackTrace(System.err);
             return err("Error listing connectors: " + e.getMessage());
         }
 
         if (connectors.isEmpty()) {
-            try {
-                if (!CLIENT.majorVersionExists(majorVersion)) {
-                    return err("Major version " + majorVersion + " does not exist. Call list_releases to see available major versions.");
-                }
-            } catch (Exception ignored) {
-            }
             return ok("No connectors found for " + edition.displayName() + " in major version " + majorVersion + ".");
         }
 
@@ -195,12 +202,12 @@ public class ChangelogReviewServer {
 
     private static McpSchema.JsonSchema getChangelogSchema() {
         Map<String, Object> props = new LinkedHashMap<>();
-        props.put("edition",              schemaEnum("Driver edition.", editionDisplayNames()));
-        props.put("connector_name",       schemaProperty("string",  "Connector name (e.g. Salesforce)"));
-        props.put("major_version",        schemaProperty("integer", "Major version year from list_releases (e.g. 2025). Each major version has its own independent changelog."));
-        props.put("after_release_number", schemaProperty("integer", "The U-number exactly as shown by list_releases. For '2025 U1' use 1, for '2025 U2' use 2. Must be >= 1. Do NOT subtract or compute — use the number directly."));
-        props.put("after_date",           schemaProperty("string",  "Return entries after this date (ISO 8601 format, e.g. '2025-10-28'). Use for date-based queries like 'changes in the last month'."));
-        props.put("after_build",          schemaProperty("integer", "Return entries after this build number. Only use if the user provides a specific build number. Prefer after_date or after_release_number instead."));
+        props.put("edition",        schemaEnum("Driver edition.", Edition.displayNames()));
+        props.put("connector_name", schemaProperty("string",  "Connector name (e.g. Salesforce)"));
+        props.put("major_version",  schemaProperty("integer", "Major version year of the changelog to read, from list_releases (e.g. 2026)."));
+        props.put("after_release",  schemaProperty("string",  "Show entries after this release, copied from list_releases. Either a full release like \"2025u3\" (works across major versions, e.g. when upgrading from 2025 U3 to a 2026 release), or a bare U-number like \"2\" for U2 within major_version. Do NOT subtract or compute — copy the value directly."));
+        props.put("after_date",     schemaProperty("string",  "Return entries after this date (ISO 8601 format, e.g. '2025-10-28'). Use for date-based queries like 'changes in the last month'."));
+        props.put("after_build",    schemaProperty("integer", "Return entries after this build number. Only use if the user provides a specific build number. Prefer after_date or after_release instead."));
         return new McpSchema.JsonSchema("object", props,
                 Arrays.asList("edition", "connector_name", "major_version"), null, null, null);
     }
@@ -215,70 +222,24 @@ public class ChangelogReviewServer {
             return err(e.getMessage());
         }
 
-        String objName = stringArg(args, "connector_name");
-        if (objName == null) {
+        String connectorName = stringArg(args, "connector_name");
+        if (connectorName == null) {
             return err("connector_name is required.");
         }
 
-        // -- Resolve baseline build number from exactly one "after" param --
-        Integer afterBuild         = optIntArg(args, "after_build");
-        Integer afterReleaseNumber = optIntArg(args, "after_release_number");
-        String  afterDate          = stringArg(args, "after_date");
+        String  afterRelease = stringArg(args, "after_release");
+        String  afterDate    = stringArg(args, "after_date");
+        Integer afterBuild   = optIntArg(args, "after_build");
 
-        int afterCount = (afterBuild != null ? 1 : 0) + (afterReleaseNumber != null ? 1 : 0) + (afterDate != null ? 1 : 0);
-        if (afterCount == 0) {
-            return err("Provide exactly one of: after_release_number, after_date, or after_build.");
-        }
-        if (afterCount > 1) {
-            return err("Provide only one of: after_release_number, after_date, or after_build.");
-        }
-
-        int baselineBuild;
         try {
-            baselineBuild = CLIENT.resolveBaseline(edition, majorVersion, objName,
-                    afterReleaseNumber != null ? afterReleaseNumber.toString() : null, afterDate, afterBuild);
+            return ok(CLIENT.changelogReport(edition, majorVersion, connectorName,
+                    afterRelease, afterDate, afterBuild));
         } catch (IllegalArgumentException e) {
             return err(appendConnectorHint(e.getMessage(), edition, majorVersion));
         } catch (Exception e) {
             e.printStackTrace(System.err);
-            return err("Error resolving baseline build: " + e.getMessage());
+            return err("Error getting changelog: " + e.getMessage());
         }
-
-        // -- Fetch and filter changelog --
-        String csv;
-        try {
-            csv = CLIENT.fetchChangelogCsv(edition, majorVersion, objName);
-        } catch (Exception e) {
-            e.printStackTrace(System.err);
-            return err("Error fetching changelog: " + e.getMessage());
-        }
-        if (csv == null) {
-            return err(appendConnectorHint(
-                    "No changelog found for '" + objName + "' (" + edition.displayName() + ").",
-                    edition, majorVersion));
-        }
-
-        Changelog.Filtered result;
-        try {
-            result = Changelog.filterAfterBuild(csv, baselineBuild);
-        } catch (IllegalArgumentException e) {
-            return err(e.getMessage());
-        }
-
-        if (result.entries().isEmpty()) {
-            return ok("No changelog entries after build " + baselineBuild + " for '" + objName
-                    + "' in major version " + majorVersion + ".");
-        }
-
-        StringBuilder sb = new StringBuilder();
-        sb.append(String.format("Changelog: %s (%s) v%d — %d entr%s after build %d%n%n",
-                objName, edition.displayName(), majorVersion,
-                result.entries().size(), result.entries().size() == 1 ? "y" : "ies", baselineBuild));
-        sb.append(result.header()).append('\n');
-        for (String line : result.entries()) {
-            sb.append(line).append('\n');
-        }
-        return ok(sb.toString().stripTrailing());
     }
 
     // ============================================================
@@ -286,22 +247,63 @@ public class ChangelogReviewServer {
     // ============================================================
 
     public static void main(String[] args) throws Exception {
+        // The transport owns stdin, so EOF (client gone) is observed here via a
+        // wrapper; main then exits instead of outliving the disconnected client.
+        CountDownLatch stdinClosed = new CountDownLatch(1);
+        InputStream stdin = new FilterInputStream(System.in) {
+            @Override
+            public int read() throws IOException {
+                int b = super.read();
+                if (b < 0) stdinClosed.countDown();
+                return b;
+            }
+
+            @Override
+            public int read(byte[] buf, int off, int len) throws IOException {
+                int n = super.read(buf, off, len);
+                if (n < 0) stdinClosed.countDown();
+                return n;
+            }
+        };
         StdioServerTransportProvider transport =
-                new StdioServerTransportProvider(McpJsonDefaults.getMapper());
+                new StdioServerTransportProvider(McpJsonDefaults.getMapper(), stdin, System.out);
 
         McpServer.sync(transport)
-                .serverInfo("cdata-changelog-review-mcp", "1.2.0")
+                .serverInfo("cdata-changelog-review-mcp", version())
+                .instructions("""
+                        This server answers "what changed?" questions about CData driver connectors \
+                        (Salesforce, MySQL, and ~280 others), which ship in several editions (JDBC, \
+                        ADO .NET, ODBC, Python).
+
+                        Domain model:
+                        - A release is a major version year plus an update number: "2026 U0" is \
+                        major_version 2026, update 0. Updates within a year are cumulative.
+                        - Each major version has its own independent changelog per connector; pick \
+                        major_version by which changelog the user wants to read, and a baseline \
+                        (release, date, or build) for how far back to look. Cross-version questions \
+                        ("what changed upgrading from 2025 U3 to 2026 U0?") use major_version 2026 \
+                        with after_release "2025u3".
+                        - A baseline release from an older major version is AMBIGUOUS unless the \
+                        user said which changelog to read: "what changed since 2025 U2?" could mean \
+                        the 2025 line's changes after U2 (major_version 2025) or everything in 2026 \
+                        since that baseline (major_version 2026), and the two give different \
+                        results. Ask the user which they mean before calling get_changelog.
+                        - Build numbers are internal day counters; never compute or guess them. \
+                        Prefer release or date baselines.
+
+                        Workflow: list_releases first, then list_connectors if unsure of the exact \
+                        connector name, then get_changelog. Never guess release numbers or connector \
+                        names - only use values these tools returned. If the user gave no edition or \
+                        no baseline, ask them instead of assuming.""")
                 .capabilities(ServerCapabilities.builder().tools(true).build())
 
                 .toolCall(
                         McpSchema.Tool.builder()
                                 .name("list_releases")
                                 .description(
-                                        "List available CData connector releases, newest first. " +
-                                        "Step 1 of the workflow: list_releases → list_connectors → get_changelog. " +
-                                        "MUST be called before get_changelog — only use release numbers returned here. " +
-                                        "Do NOT guess or assume release numbers — only releases returned by this tool are valid. " +
-                                        "No arguments required.")
+                                        "List available CData connector releases, newest first, with the " +
+                                        "get_changelog arguments for each. Call this before get_changelog - " +
+                                        "only releases returned here are valid. No arguments required.")
                                 .inputSchema(listReleasesSchema())
                                 .build(),
                         (exchange, request) -> handleListReleases(
@@ -311,11 +313,9 @@ public class ChangelogReviewServer {
                         McpSchema.Tool.builder()
                                 .name("list_connectors")
                                 .description(
-                                        "List the valid connectors for an edition and major version. " +
-                                        "Step 2 of the workflow: list_releases → list_connectors → get_changelog. " +
-                                        "Call this before get_changelog whenever you are unsure of the exact connector name — " +
-                                        "do NOT guess connector names. Use a returned name verbatim as get_changelog's connector_name. " +
-                                        "Requires edition and major_version.")
+                                        "List the valid connector names for an edition and major version. " +
+                                        "Use a returned name verbatim as get_changelog's connector_name - " +
+                                        "do not guess connector names.")
                                 .inputSchema(listConnectorsSchema())
                                 .build(),
                         (exchange, request) -> handleListConnectors(
@@ -325,17 +325,12 @@ public class ChangelogReviewServer {
                         McpSchema.Tool.builder()
                                 .name("get_changelog")
                                 .description(
-                                        "Get changelog entries for a CData connector since a release, date, or build. " +
-                                        "Each major version has its own independent changelog. " +
-                                        "IMPORTANT: Call list_releases first. Do NOT invent or guess release numbers. " +
-                                        "If unsure of the exact connector_name, call list_connectors first and use a name from it verbatim. " +
-                                        "The major_version is NOT the current calendar year — it is the version year from list_releases. " +
-                                        "Requires EXACTLY ONE of: " +
-                                        "after_release_number (U-number, e.g. 2 for U2), " +
-                                        "after_date (ISO 8601 date, e.g. '2025-10-28' — use for 'changes in the last month'), or " +
-                                        "after_build (integer build number). " +
-                                        "If the user doesn't specify a release, date, or build, ASK. " +
-                                        "If edition not specified, ASK.")
+                                        "Get changelog entries for a CData connector since a baseline. " +
+                                        "Requires EXACTLY ONE baseline: after_release, after_date, or after_build. " +
+                                        "The major_version is NOT the current calendar year - use a value from " +
+                                        "list_releases. If the baseline release is from a different major version " +
+                                        "and the user did not say which changelog to read, ask them first. " +
+                                        "Returns CSV with a header row.")
                                 .inputSchema(getChangelogSchema())
                                 .build(),
                         (exchange, request) -> handleGetChangelog(
@@ -344,6 +339,8 @@ public class ChangelogReviewServer {
                 .build();
 
         System.err.println("CData Changelog Review MCP server started.");
-        Thread.currentThread().join();
+        stdinClosed.await();
+        transport.closeGracefully().block(Duration.ofSeconds(5));
+        System.exit(0);
     }
 }

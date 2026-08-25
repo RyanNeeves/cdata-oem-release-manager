@@ -3,6 +3,7 @@ package com.cdata.embeddeddrivers.cli.commands;
 import java.util.List;
 import java.util.concurrent.Callable;
 
+import com.cdata.embeddeddrivers.cli.EditionCandidates;
 import com.cdata.embeddeddrivers.core.Edition;
 import com.cdata.embeddeddrivers.core.OemBuildsClient;
 
@@ -11,36 +12,40 @@ import picocli.CommandLine.Option;
 
 @Command(
         name = "connectors",
+        mixinStandardHelpOptions = true,
         description = "List the connectors available for an edition and major version.")
 public class ConnectorsCommand implements Callable<Integer> {
 
-    @Option(names = {"-e", "--edition"}, required = true,
-            description = "Driver edition: JDBC, ADO-NET-FRAMEWORK, ADO-NET-STANDARD, ODBC-UNIX, "
-                    + "ODBC-WINDOWS, PYTHON-MAC, PYTHON-UNIX, PYTHON-WINDOWS.")
+    @Option(names = {"-e", "--edition"}, required = true, completionCandidates = EditionCandidates.class,
+            description = "Driver edition: ${COMPLETION-CANDIDATES}.")
     Edition edition;
 
-    @Option(names = {"-v", "--major-version"}, required = true,
-            description = "Major version year (e.g. 2025). Run 'cdrm releases' to see available versions.")
-    int majorVersion;
+    @Option(names = {"-v", "--major-version"},
+            description = "Major version year (e.g. 2025). Defaults to the latest release's major version. "
+                    + "Run 'cdrm releases' to see available versions.")
+    Integer majorVersion;
 
     @Override
     public Integer call() throws Exception {
         OemBuildsClient client = new OemBuildsClient();
-        List<String> connectors = client.listConnectors(edition, majorVersion);
+        int version = majorVersion != null ? majorVersion : client.latestRelease().year();
+
+        List<String> connectors;
+        try {
+            connectors = client.listConnectors(edition, version);
+        } catch (IllegalArgumentException e) {
+            System.err.println(e.getMessage() + " Run 'cdrm releases' to see available versions.");
+            return 1;
+        }
 
         if (connectors.isEmpty()) {
-            if (!client.majorVersionExists(majorVersion)) {
-                System.err.println("Major version " + majorVersion
-                        + " does not exist. Run 'cdrm releases' to see available versions.");
-                return 1;
-            }
             System.out.println("No connectors found for " + edition.displayName()
-                    + " in major version " + majorVersion + ".");
+                    + " in major version " + version + ".");
             return 0;
         }
 
         System.out.printf("%d connector%s available for %s in major version %d:%n",
-                connectors.size(), connectors.size() == 1 ? "" : "s", edition.displayName(), majorVersion);
+                connectors.size(), connectors.size() == 1 ? "" : "s", edition.displayName(), version);
         for (String name : connectors) {
             System.out.println("  " + name);
         }

@@ -1,5 +1,6 @@
 package com.cdata.embeddeddrivers.core;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -36,5 +37,18 @@ class ChangelogTest {
     void rejectsMissingVersionColumn() {
         assertThrows(IllegalArgumentException.class,
                 () -> Changelog.filterAfterBuild("Date,Notes\n2025-01-10,x", 1));
+    }
+
+    @Test
+    void splitsCsvLines() {
+        assertArrayEquals(new String[] {"a", "b", "c"}, Changelog.splitLine("a,b,c"));
+        assertArrayEquals(new String[] {"a", "b,c", "d"}, Changelog.splitLine("a,\"b,c\",d"));
+        assertArrayEquals(new String[] {"say \"hi\"", "x"}, Changelog.splitLine("\"say \"\"hi\"\"\",x"));
+    }
+
+    @Test
+    void findsColumnIndex() {
+        assertEquals(1, Changelog.columnIndex("Date,Version,Notes", "Version"));
+        assertEquals(-1, Changelog.columnIndex("Date,Notes", "Version"));
     }
 }

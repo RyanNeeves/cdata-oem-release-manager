@@ -25,6 +25,9 @@
       <groupId>io.modelcontextprotocol.sdk</groupId>
       <artifactId>mcp</artifactId>
     </dependency>
+    <!-- No-op SLF4J binding: silences mcp-core/reactor/json-schema-validator
+         logging, which must never reach stdout (the JSON-RPC channel), and
+         suppresses SLF4J's "no providers were found" startup warning. -->
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-nop</artifactId>
@@ -35,6 +38,12 @@
   <build>
     <!-- Keep the jar name the MCP client configs already reference -->
     <finalName>cdata-changelog-review-mcp</finalName>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>true</filtering>
+      </resource>
+    </resources>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

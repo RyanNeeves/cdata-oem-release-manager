@@ -1,6 +1,6 @@
 package com.cdata.embeddeddrivers.core;
 
-/** An object in the OEM builds bucket. */
+/** An object in a bucket listing: transport vocabulary, produced by {@code BucketReader}. */
 public record RemoteFile(String key, long size) {
 
     public String filename() {

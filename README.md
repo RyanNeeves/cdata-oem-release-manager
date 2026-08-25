@@ -67,8 +67,9 @@ java -jar cdrm.jar releases
 java -jar cdrm.jar connectors --edition JDBC --major-version 2025
 
 # What changed in a connector since a release, date, or build?
+# (-v picks the changelog's major version; it defaults to the latest release's)
+java -jar cdrm.jar changelog -e jdbc -c Salesforce --after-date 2025-10-28
 java -jar cdrm.jar changelog -e jdbc -c Salesforce -v 2025 --after-release 2
-java -jar cdrm.jar changelog -e jdbc -c Salesforce -v 2025 --after-date 2025-10-28
 
 # Upgrading across major versions? Baseline against the old version's release:
 java -jar cdrm.jar changelog -e jdbc -c Salesforce -v 2026 --after-release 2025u2
@@ -76,14 +77,15 @@ java -jar cdrm.jar changelog -e jdbc -c Salesforce -v 2026 --after-release 2025u
 # Download a driver build
 java -jar cdrm.jar download -e jdbc -r latest -c Salesforce -o ./drivers
 
-# Download several at once, or a whole edition
+# Download several at once, or a whole edition (the default when no -c is given)
 java -jar cdrm.jar download -e jdbc -r latest -c Salesforce -c MySQL -o ./drivers
-java -jar cdrm.jar download -e python-windows -r latest --all -o ./drivers
+java -jar cdrm.jar download -e python-windows -r latest -o ./drivers
 ```
 
-**Editions:** `JDBC`, `ADO-NET-FRAMEWORK`, `ADO-NET-STANDARD`, `ODBC-UNIX`,
-`ODBC-WINDOWS`, `PYTHON-MAC`, `PYTHON-UNIX`, `PYTHON-WINDOWS`
-(case doesn't matter, and spaces/dots/hyphens are interchangeable).
+**Editions:** `JDBC`, `ADO .NET FRAMEWORK`, `ADO .NET STANDARD`, `ODBC UNIX`,
+`ODBC WINDOWS`, `PYTHON MAC`, `PYTHON UNIX`, `PYTHON WINDOWS`
+(case doesn't matter, and spaces/dots/hyphens are interchangeable, so
+`ado-net-framework` works unquoted in a shell).
 
 **Releases:** `2025u3`, `v25u3`, `"2025 U3"`, or `latest`.
 

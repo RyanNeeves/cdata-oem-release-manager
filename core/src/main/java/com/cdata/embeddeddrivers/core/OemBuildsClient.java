@@ -1,118 +1,42 @@
 package com.cdata.embeddeddrivers.core;
 
 import java.io.IOException;
-import java.net.URI;
-import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Client for the public CData OEM builds bucket. Discovers releases,
  * connectors, build markers, and changelogs, and downloads driver builds.
+ * Transport lives in {@link BucketReader}; this class holds only the
+ * bucket contract's semantics.
  */
 public class OemBuildsClient {
 
     public static final String BASE_URL = "https://downloads.cdata.com/cdataoembuilds";
 
-    /** Releases that predate bld-* markers in the bucket, mapped to their build numbers. */
-    private static final Map<Release, Integer> HARDCODED_RELEASES = Map.of(new Release(2025, 1), 9434);
+    private final BucketReader bucket;
 
-    private static final Pattern PAT_S3_CONTENTS     = Pattern.compile("<Contents>(.*?)</Contents>", Pattern.DOTALL);
-    private static final Pattern PAT_S3_KEY          = Pattern.compile("<Key>([^<]+)</Key>");
-    private static final Pattern PAT_S3_SIZE         = Pattern.compile("<Size>(\\d+)</Size>");
-    private static final Pattern PAT_S3_CONTINUATION = Pattern.compile("<NextContinuationToken>([^<]+)</NextContinuationToken>");
-    private static final Pattern PAT_S3_RELEASE      = Pattern.compile("<Prefix>v(\\d{2})u(\\d+)/</Prefix>");
-
-    private final HttpClient http = HttpClient.newBuilder()
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .connectTimeout(Duration.ofSeconds(30))
-            .build();
-
-    /** Response body plus HTTP status, so callers can distinguish 404 from other failures. */
-    public record HttpResult(int status, String body) {
+    public OemBuildsClient() {
+        this(new BucketReader(BASE_URL));
     }
 
-    HttpResult get(String url) throws IOException {
-        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
-                .timeout(Duration.ofSeconds(30))
-                .GET()
-                .build();
-        try {
-            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
-            return new HttpResult(response.statusCode(), response.body());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Interrupted while fetching " + url, e);
-        }
+    OemBuildsClient(BucketReader bucket) {
+        this.bucket = bucket;
     }
 
-    /** Unescapes XML entities in S3 ListObjectsV2 responses. */
-    private static String xmlUnescape(String s) {
-        return s.replace("&amp;", "&").replace("&lt;", "<")
-                .replace("&gt;", ">").replace("&apos;", "'").replace("&quot;", "\"");
-    }
-
-    /** Lists all objects (with sizes) under a given S3 prefix, handling pagination via continuation tokens. */
-    public List<RemoteFile> listFiles(String prefix) throws IOException {
-        List<RemoteFile> files = new ArrayList<>();
-        String continuationToken = null;
-        do {
-            StringBuilder url = new StringBuilder(BASE_URL)
-                    .append("/?list-type=2&prefix=")
-                    .append(URLEncoder.encode(prefix, StandardCharsets.UTF_8));
-            if (continuationToken != null) {
-                url.append("&continuation-token=").append(URLEncoder.encode(continuationToken, StandardCharsets.UTF_8));
-            }
-            HttpResult res = get(url.toString());
-            if (res.status() != 200) {
-                throw new IOException("S3 list returned HTTP " + res.status() + " for prefix: " + prefix);
-            }
-            Matcher cm = PAT_S3_CONTENTS.matcher(res.body());
-            while (cm.find()) {
-                String block = cm.group(1);
-                Matcher km = PAT_S3_KEY.matcher(block);
-                if (!km.find()) continue;
-                Matcher sm = PAT_S3_SIZE.matcher(block);
-                long size = sm.find() ? Long.parseLong(sm.group(1)) : -1;
-                files.add(new RemoteFile(xmlUnescape(km.group(1)), size));
-            }
-            if (res.body().contains("<IsTruncated>true</IsTruncated>")) {
-                Matcher tm = PAT_S3_CONTINUATION.matcher(res.body());
-                continuationToken = tm.find() ? tm.group(1) : null;
-            } else {
-                continuationToken = null;
-            }
-        } while (continuationToken != null);
-        return files;
-    }
-
-    /** Discovers all available releases from S3 prefixes and hardcoded entries, newest first. */
+    /** Discovers all available releases from S3 prefixes, newest first. */
     public List<Release> listReleases() throws IOException {
-        HttpResult res = get(BASE_URL + "/?list-type=2&prefix=v&delimiter=/");
-        if (res.status() != 200) {
-            throw new IOException("S3 release discovery returned HTTP " + res.status());
-        }
-
         Set<Release> releases = new TreeSet<>();
-        Matcher m = PAT_S3_RELEASE.matcher(res.body());
-        while (m.find()) {
-            releases.add(new Release(2000 + Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2))));
+        for (String prefix : bucket.listPrefixes("v")) {
+            try {
+                releases.add(Release.parse(prefix.substring(0, prefix.length() - 1)));
+            } catch (IllegalArgumentException e) {
+                // A v* directory that isn't a release tag - not ours to list.
+            }
         }
-        releases.addAll(HARDCODED_RELEASES.keySet());
         return new ArrayList<>(releases);
     }
 
@@ -124,7 +48,7 @@ public class OemBuildsClient {
     }
 
     /** Whether any release exists for the given major version year. */
-    public boolean majorVersionExists(int year) throws IOException {
+    private boolean majorVersionExists(int year) throws IOException {
         for (Release r : listReleases()) {
             if (r.year() == year) return true;
         }
@@ -141,36 +65,74 @@ public class OemBuildsClient {
         }
     }
 
-    /** Lists the connector names that have changelogs for an edition and major version, sorted. */
+    /**
+     * Lists the connector names that have changelogs for an edition and major
+     * version, sorted. An empty list means the major version exists but has no
+     * connectors for this edition; a major version that does not exist at all
+     * throws IllegalArgumentException.
+     */
     public List<String> listConnectors(Edition edition, int majorVersion) throws IOException {
         String clPrefix = edition.changelogPrefix(majorVersion);
         Set<String> names = new TreeSet<>();
-        for (RemoteFile f : listFiles(clPrefix)) {
-            String rest = f.key().substring(clPrefix.length());
-            int slash = rest.indexOf('/');
-            if (slash > 0) names.add(rest.substring(0, slash));
+        for (String prefix : bucket.listPrefixes(clPrefix)) {
+            names.add(prefix.substring(clPrefix.length(), prefix.length() - 1));
+        }
+        if (names.isEmpty() && !majorVersionExists(majorVersion)) {
+            throw new IllegalArgumentException("Major version " + majorVersion + " does not exist.");
         }
         return new ArrayList<>(names);
     }
 
     /**
-     * Resolves a release to its build number for a connector via hardcoded
-     * releases or S3 build marker lookup.
+     * Resolves a release to its build number for a connector via S3 build
+     * marker lookup. Each connector has exactly one marker per release, so
+     * the listing is prefixed down to that marker.
      */
-    public int releaseToBuildNumber(Release release, Edition edition, String connectorName)
+    int releaseToBuildNumber(Release release, Edition edition, String connectorName)
             throws IOException {
-        Integer hardcoded = HARDCODED_RELEASES.get(release);
-        if (hardcoded != null) return hardcoded;
-
-        for (RemoteFile f : listFiles(edition.markerPrefix(release))) {
-            int build = edition.markerBuild(f.filename(), connectorName);
+        for (RemoteFile f : bucket.listFiles(edition.markerPrefix(release, connectorName))) {
+            int build = BuildNumbers.fromMarker(f.filename(), connectorName);
             if (build >= 0) return build;
         }
 
-        // No marker matched: distinguish an invalid release from an unknown connector.
+        // No marker found: distinguish an invalid release from an unknown connector.
         requireRelease(release);
         throw new IllegalArgumentException(
                 "No build found for '" + connectorName + "' in " + edition.displayName() + " / " + release.tag() + ".");
+    }
+
+    /**
+     * The full changelog query shared by every frontend: resolves the baseline
+     * from exactly one of a release, an ISO date, or an explicit build number,
+     * fetches and filters the connector's changelog, and renders the report.
+     * Invalid input and unknown connectors/releases throw
+     * IllegalArgumentException with a user-facing message.
+     */
+    public String changelogReport(Edition edition, int majorVersion, String connectorName,
+            String afterRelease, String afterDate, Integer afterBuild) throws IOException {
+        int baselineBuild = resolveBaseline(edition, majorVersion, connectorName, afterRelease, afterDate, afterBuild);
+
+        String csv = fetchChangelogCsv(edition, majorVersion, connectorName);
+        if (csv == null) {
+            throw new IllegalArgumentException(
+                    "No changelog found for '" + connectorName + "' (" + edition.displayName() + ").");
+        }
+
+        Changelog.Filtered result = Changelog.filterAfterBuild(csv, baselineBuild);
+        if (result.entries().isEmpty()) {
+            return "No changelog entries after build " + baselineBuild + " for '" + connectorName
+                    + "' in major version " + majorVersion + ". The connector is unchanged since that baseline.";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("Changelog: %s (%s) v%d - %d entr%s after build %d%n%n",
+                connectorName, edition.displayName(), majorVersion,
+                result.entries().size(), result.entries().size() == 1 ? "y" : "ies", baselineBuild));
+        sb.append(result.header()).append('\n');
+        for (String line : result.entries()) {
+            sb.append(line).append('\n');
+        }
+        return sb.toString().stripTrailing();
     }
 
     /**
@@ -178,20 +140,23 @@ public class OemBuildsClient {
      * release, an ISO date, or an explicit build number. The release may be a
      * bare U-number within {@code majorVersion} or a full release in any major
      * version (e.g. "2025u3") - build numbers are days since 2000-01-01, so
-     * they are comparable across major versions. Callers ensure only one
-     * baseline is non-null; value validation happens here.
+     * they are comparable across major versions.
      */
-    public int resolveBaseline(Edition edition, int majorVersion, String connectorName,
+    private int resolveBaseline(Edition edition, int majorVersion, String connectorName,
             String afterRelease, String afterDate, Integer afterBuild) throws IOException {
+        int given = (afterRelease != null ? 1 : 0) + (afterDate != null ? 1 : 0) + (afterBuild != null ? 1 : 0);
+        if (given == 0) {
+            throw new IllegalArgumentException("No baseline given: provide a release number, date, or build number.");
+        }
+        if (given > 1) {
+            throw new IllegalArgumentException("Provide only one baseline: a release number, date, or build number.");
+        }
         if (afterDate != null) {
             return BuildNumbers.fromDate(afterDate);
         }
         if (afterBuild != null) {
             if (afterBuild < 1) throw new IllegalArgumentException("The build number must be positive.");
             return afterBuild;
-        }
-        if (afterRelease == null) {
-            throw new IllegalArgumentException("No baseline given: provide a release number, date, or build number.");
         }
         return releaseToBuildNumber(Release.parseOrNumber(afterRelease, majorVersion), edition, connectorName);
     }
@@ -200,10 +165,8 @@ public class OemBuildsClient {
      * Fetches the raw changelog CSV for a connector. Returns null if the
      * changelog does not exist (HTTP 404).
      */
-    public String fetchChangelogCsv(Edition edition, int majorVersion, String connectorName) throws IOException {
-        String url = BASE_URL + "/" + edition.changelogPrefix(majorVersion)
-                + connectorName.toLowerCase(Locale.ROOT) + "/changelog.csv";
-        HttpResult res = get(url);
+    private String fetchChangelogCsv(Edition edition, int majorVersion, String connectorName) throws IOException {
+        BucketReader.HttpResult res = bucket.getObject(edition.changelogKey(majorVersion, connectorName));
         if (res.status() == 404) return null;
         if (res.status() != 200) {
             throw new IOException("HTTP " + res.status() + " fetching changelog for '" + connectorName + "'.");
@@ -211,39 +174,21 @@ public class OemBuildsClient {
         return res.body();
     }
 
-    /** Lists the downloadable driver artifacts for a release and edition (excludes bld-* markers). */
+    /**
+     * Lists the downloadable driver artifacts for a release and edition. A
+     * release prefix holds exactly the artifacts plus one bld-* marker per
+     * connector, so dropping the markers leaves the artifacts.
+     */
     public List<RemoteFile> listDriverFiles(Release release, Edition edition) throws IOException {
         List<RemoteFile> artifacts = new ArrayList<>();
-        for (RemoteFile f : listFiles(edition.releasePrefix(release))) {
-            if (edition.isDriverArtifact(f.filename())) artifacts.add(f);
+        for (RemoteFile f : bucket.listFiles(edition.releasePrefix(release))) {
+            if (!f.filename().startsWith(BuildNumbers.MARKER_PREFIX)) artifacts.add(f);
         }
         return artifacts;
     }
 
-    /**
-     * Downloads a bucket object to {@code destDir}, keeping its filename.
-     * Streams to a .part file and renames on success, so an interrupted
-     * download never leaves a truncated file under the final name.
-     * Creates the directory if needed. Returns the path written.
-     */
+    /** Downloads a driver artifact to {@code destDir}. See {@link BucketReader#download}. */
     public Path download(RemoteFile file, Path destDir) throws IOException {
-        Files.createDirectories(destDir);
-        Path dest = destDir.resolve(file.filename());
-        Path part = destDir.resolve(file.filename() + ".part");
-        String url = BASE_URL + "/" + file.key();
-        HttpRequest request = HttpRequest.newBuilder(URI.create(url)).GET().build();
-        try {
-            HttpResponse<Path> response = http.send(request, HttpResponse.BodyHandlers.ofFile(part));
-            if (response.statusCode() != 200) {
-                throw new IOException("HTTP " + response.statusCode() + " downloading " + url);
-            }
-            Files.move(part, dest, StandardCopyOption.REPLACE_EXISTING);
-            return dest;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Interrupted while downloading " + url, e);
-        } finally {
-            Files.deleteIfExists(part);
-        }
+        return bucket.download(file, destDir);
     }
 }

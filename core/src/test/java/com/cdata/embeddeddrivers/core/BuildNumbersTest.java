@@ -16,6 +16,20 @@ class BuildNumbersTest {
     }
 
     @Test
+    void extractsBuildFromMarker() {
+        assertEquals(9655, BuildNumbers.fromMarker("bld-salesforce.9655", "salesforce"));
+        // markers are lowercase in the bucket, connector input is display-cased
+        assertEquals(9655, BuildNumbers.fromMarker("bld-sapconcur.9655", "SAPConcur"));
+        assertEquals(9655, BuildNumbers.fromMarker("bld-zendesk.9655", "Zendesk"));
+
+        assertEquals(-1, BuildNumbers.fromMarker("bld-mysql.9655", "salesforce"));
+        assertEquals(-1, BuildNumbers.fromMarker("cdata.jdbc.salesforce.jar", "salesforce"));
+        assertEquals(-1, BuildNumbers.fromMarker("bld-salesforce.notanumber", "salesforce"));
+        assertEquals(-1, BuildNumbers.fromMarker("bld-salesforce", "salesforce"));
+        assertEquals(-1, BuildNumbers.fromMarker("bld-salesforce.", "salesforce"));
+    }
+
+    @Test
     void convertsDateToBuildNumber() {
         // 2000-01-01 is day 0
         assertEquals(0, BuildNumbers.fromDate("2000-01-01"));

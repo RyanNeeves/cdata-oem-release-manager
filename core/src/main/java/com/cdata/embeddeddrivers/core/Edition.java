@@ -1,65 +1,67 @@
 package com.cdata.embeddeddrivers.core;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 /**
- * A CData driver edition and its layout within the OEM builds bucket.
+ * A CData driver edition. Each constant is one row of the bucket contract:
+ * the constant itself is the edition's identity (and display name), declared
+ * together with the bucket directory it lives in and the artifact filenames
+ * it ships ({name} is the lowercase connector name).
  *
- * Bucket naming is consistent per edition: artifact filenames are a fixed
- * wrapper around the lowercase connector name (e.g. "cdata.jdbc.{name}.jar"),
- * and bld-* build markers are a fixed prefix plus the connector name and
- * build number. Marker connector names are display-cased in the ADO and
- * ODBC Windows editions (e.g. "SAPConcur"), so name comparison is always
- * case-insensitive.
+ * Connector names are always lowercase in the bucket, while wrapper text
+ * around them keeps its fixed spelling (e.g. "System.Data.CData."). Callers
+ * may supply any casing (a user may type "SAPConcur"); it is lowercased on
+ * the way in.
+ *
+ * Build markers are named identically in every edition, so only their
+ * location is an edition concern ({@link #markerPrefix(Release, String)});
+ * parsing them lives in {@link BuildNumbers#fromMarker}.
+ *
+ * The bucket also carries two legacy editions (ado/net35 and odbc/net40/x86)
+ * that are intentionally not modeled here.
  */
 public enum Edition {
-    JDBC("JDBC", "jdbc", "bld-cdata.jdbc.",
-            List.of(new ArtifactTemplate("cdata.jdbc.", ".jar"))),
-    ADO_NET_FRAMEWORK("ADO .NET FRAMEWORK", "ado/net40", "bld-System.Data.CData.",
-            List.of(new ArtifactTemplate("system.data.cdata.", ".dll"))),
-    ADO_NET_STANDARD("ADO .NET STANDARD", "ado/netstandard20", "bld-System.Data.CData.",
-            List.of(new ArtifactTemplate("system.data.cdata.", ".dll"))),
-    ODBC_UNIX("ODBC UNIX", "odbc/linux/x64", "bld-cdata.odbc.",
-            List.of(new ArtifactTemplate("cdata.odbc.", ".ini"),
-                    new ArtifactTemplate("cdata.odbcm.", ".jar"),
-                    new ArtifactTemplate("lib", "odbc.x64.so"))),
-    ODBC_WINDOWS("ODBC WINDOWS", "odbc/net40/x64", "bld-CData.ODBC.",
-            List.of(new ArtifactTemplate("CData.ODBC.", ".dll"),
-                    new ArtifactTemplate("CData.ODBCm.", ".dll"))),
-    PYTHON_MAC("PYTHON MAC", "python/mac", "bld-",
-            List.of(new ArtifactTemplate("", ".setup_mac.zip"))),
-    PYTHON_UNIX("PYTHON UNIX", "python/unix", "bld-",
-            List.of(new ArtifactTemplate("", ".setup_unix.zip"))),
-    PYTHON_WINDOWS("PYTHON WINDOWS", "python/win", "bld-",
-            List.of(new ArtifactTemplate("", ".setup_win.zip")));
+    JDBC("jdbc",
+            "cdata.jdbc.{name}.jar"),
+    ADO_NET_FRAMEWORK("ado/net40",
+            "System.Data.CData.{name}.dll"),
+    ADO_NET_STANDARD("ado/netstandard20",
+            "System.Data.CData.{name}.dll"),
+    ODBC_UNIX("odbc/linux/x64",
+            "cdata.odbc.{name}.ini", "cdata.odbcm.{name}.jar", "lib{name}odbc.x64.so"),
+    ODBC_WINDOWS("odbc/net40/x64",
+            "CData.ODBC.{name}.dll", "CData.ODBCm.{name}.dll"),
+    PYTHON_MAC("python/mac",
+            "{name}.setup_mac.zip"),
+    PYTHON_UNIX("python/unix",
+            "{name}.setup_unix.zip"),
+    PYTHON_WINDOWS("python/win",
+            "{name}.setup_win.zip");
 
-    /** A driver artifact filename shape: fixed prefix + lowercase connector name + fixed suffix. */
-    public record ArtifactTemplate(String prefix, String suffix) {
-
-        /** The connector-name portion of a matching filename, or null if the filename doesn't fit this template. */
-        public String connectorOf(String filename) {
-            if (filename.length() <= prefix.length() + suffix.length()) return null;
-            if (!filename.regionMatches(true, 0, prefix, 0, prefix.length())) return null;
-            if (!filename.regionMatches(true, filename.length() - suffix.length(), suffix, 0, suffix.length())) return null;
-            return filename.substring(prefix.length(), filename.length() - suffix.length());
-        }
-    }
-
-    private final String displayName;
     private final String subpath;
-    private final String bldMarkerPrefix;
-    private final List<ArtifactTemplate> artifactTemplates;
+    private final List<String> artifactPatterns;
 
-    Edition(String displayName, String subpath, String bldMarkerPrefix, List<ArtifactTemplate> artifactTemplates) {
-        this.displayName = displayName;
+    Edition(String subpath, String... artifactPatterns) {
         this.subpath = subpath;
-        this.bldMarkerPrefix = bldMarkerPrefix;
-        this.artifactTemplates = artifactTemplates;
+        this.artifactPatterns = List.of(artifactPatterns);
     }
 
+    /** Human-readable name: the constant with spaces, except ".NET" keeps its dot. */
     public String displayName() {
-        return displayName;
+        return switch (this) {
+            case ADO_NET_FRAMEWORK -> "ADO .NET FRAMEWORK";
+            case ADO_NET_STANDARD  -> "ADO .NET STANDARD";
+            default -> name().replace('_', ' ');
+        };
+    }
+
+    /** All edition display names in declaration order, for help text and schemas. */
+    public static List<String> displayNames() {
+        List<String> names = new ArrayList<>();
+        for (Edition e : values()) names.add(e.displayName());
+        return names;
     }
 
     /** Bucket prefix for this edition's files in a release (e.g. "v26u0/ado/net40/"). */
@@ -67,9 +69,14 @@ public enum Edition {
         return release.tag() + "/" + subpath + "/";
     }
 
-    /** Bucket prefix matching exactly this edition's bld-* markers in a release. */
-    public String markerPrefix(Release release) {
-        return releasePrefix(release) + bldMarkerPrefix;
+    /**
+     * Bucket prefix matching exactly one connector's bld-* marker in a release
+     * (e.g. "v26u0/jdbc/bld-salesforce."). The trailing dot keeps "salesforce"
+     * from matching "salesforcemarketingcloud".
+     */
+    public String markerPrefix(Release release, String connectorName) {
+        return releasePrefix(release) + BuildNumbers.MARKER_PREFIX
+                + connectorName.toLowerCase(Locale.ROOT) + ".";
     }
 
     /** Bucket prefix for this edition's changelogs in a major version (e.g. "changelogs/v25/ado/"). */
@@ -79,43 +86,20 @@ public enum Edition {
         return "changelogs/v" + (majorVersion % 100) + "/" + changelogDir + "/";
     }
 
-    /**
-     * The connector name embedded in a driver artifact filename, or null if
-     * the filename is not an artifact of this edition (e.g. a bld-* marker).
-     */
-    public String artifactConnector(String filename) {
-        for (ArtifactTemplate t : artifactTemplates) {
-            String name = t.connectorOf(filename);
-            if (name != null) return name;
-        }
-        return null;
-    }
-
-    /** Whether a filename is a downloadable driver artifact of this edition (as opposed to a bld-* marker). */
-    public boolean isDriverArtifact(String filename) {
-        return artifactConnector(filename) != null;
-    }
-
-    /** Whether a driver artifact filename in this edition belongs to the given connector. */
-    public boolean artifactMatchesConnector(String filename, String connectorName) {
-        return connectorName.equalsIgnoreCase(artifactConnector(filename));
+    /** Bucket key of a connector's changelog CSV (e.g. "changelogs/v25/ado/salesforce/changelog.csv"). */
+    public String changelogKey(int majorVersion, String connectorName) {
+        return changelogPrefix(majorVersion) + connectorName.toLowerCase(Locale.ROOT) + "/changelog.csv";
     }
 
     /**
-     * Extracts the build number from a bld-* marker filename if it belongs to
-     * the given connector (name compared case-insensitively). Returns -1 otherwise.
+     * The artifact filenames a connector has in this edition (multi-file
+     * editions like ODBC UNIX have several).
      */
-    public int markerBuild(String filename, String connectorName) {
-        if (!filename.regionMatches(true, 0, bldMarkerPrefix, 0, bldMarkerPrefix.length())) return -1;
-        String rest = filename.substring(bldMarkerPrefix.length());
-        int dot = rest.lastIndexOf('.');
-        if (dot <= 0 || dot == rest.length() - 1) return -1;
-        if (!rest.substring(0, dot).equalsIgnoreCase(connectorName)) return -1;
-        try {
-            return Integer.parseInt(rest.substring(dot + 1));
-        } catch (NumberFormatException e) {
-            return -1;
-        }
+    public List<String> artifactFilenames(String connectorName) {
+        String name = connectorName.toLowerCase(Locale.ROOT);
+        return artifactPatterns.stream()
+                .map(p -> p.replace("{name}", name))
+                .toList();
     }
 
     /**
@@ -125,16 +109,12 @@ public enum Edition {
     public static Edition parse(String input) {
         String normalized = normalize(input);
         for (Edition e : values()) {
-            if (normalize(e.displayName).equals(normalized) || e.name().equalsIgnoreCase(input.trim())) {
+            if (normalize(e.displayName()).equals(normalized) || e.name().equalsIgnoreCase(input.trim())) {
                 return e;
             }
         }
-        StringBuilder valid = new StringBuilder();
-        for (Edition e : values()) {
-            if (valid.length() > 0) valid.append(", ");
-            valid.append(e.displayName);
-        }
-        throw new IllegalArgumentException("Unknown edition '" + input + "'. Valid editions: " + valid);
+        throw new IllegalArgumentException(
+                "Unknown edition '" + input + "'. Valid editions: " + String.join(", ", displayNames()));
     }
 
     private static String normalize(String s) {

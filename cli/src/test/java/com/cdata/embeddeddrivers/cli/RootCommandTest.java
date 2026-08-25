@@ -37,14 +37,44 @@ class RootCommandTest {
     }
 
     @Test
-    void downloadRequiresConnectorOrAll() {
+    void downloadRequiresRelease() {
         StringWriter err = new StringWriter();
         CommandLine cmd = RootCommand.buildCommandLine();
         cmd.setErr(new PrintWriter(err));
 
-        int exitCode = cmd.execute("download", "-e", "jdbc", "-r", "latest");
+        int exitCode = cmd.execute("download", "-e", "jdbc", "-c", "salesforce");
 
-        assertEquals(2, exitCode, "missing --connector/--all should be a usage error");
+        assertEquals(2, exitCode, "missing --release should be a usage error");
+    }
+
+    @Test
+    void downloadHelpListsEditionDisplayNames() {
+        StringWriter out = new StringWriter();
+        CommandLine cmd = RootCommand.buildCommandLine();
+        cmd.setOut(new PrintWriter(out));
+
+        int exitCode = cmd.execute("download", "--help");
+
+        assertEquals(0, exitCode);
+        // picocli wraps help text at 80 columns, so compare with collapsed whitespace
+        String help = out.toString().replaceAll("\\s+", " ");
+        // derived from Edition.displayNames(), not hand-maintained
+        assertTrue(help.contains("ADO .NET FRAMEWORK"),
+                "edition help should list the enum's display names");
+        assertTrue(help.contains("the default when no --connector is given"),
+                "help should state that --all is the default");
+    }
+
+    @Test
+    void downloadRejectsOutOfRangeParallel() {
+        StringWriter err = new StringWriter();
+        CommandLine cmd = RootCommand.buildCommandLine();
+        cmd.setErr(new PrintWriter(err));
+
+        int exitCode = cmd.execute("download", "-e", "jdbc", "-r", "latest", "-p", "99");
+
+        assertEquals(2, exitCode, "out-of-range --parallel should be a usage error");
+        assertTrue(err.toString().contains("--parallel must be between 1 and 16"), err.toString());
     }
 
     @Test
