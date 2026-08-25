@@ -3,6 +3,9 @@ target/
 *.class
 *.jar
 
+# Tests are kept locally and not published in this repo
+*/src/test/
+
 # IDE
 .idea/
 *.iml
