@@ -12,7 +12,6 @@ import picocli.CommandLine.Option;
 
 @Command(
         name = "connectors",
-        mixinStandardHelpOptions = true,
         description = "List the connectors available for an edition and major version.")
 public class ConnectorsCommand implements Callable<Integer> {
 

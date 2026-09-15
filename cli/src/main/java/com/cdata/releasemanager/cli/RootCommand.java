@@ -14,6 +14,7 @@ import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.IVersionProvider;
 import picocli.CommandLine.Model.CommandSpec;
+import picocli.CommandLine.ScopeType;
 import picocli.CommandLine.Spec;
 
 @Command(
@@ -21,6 +22,9 @@ import picocli.CommandLine.Spec;
         description = "CData Release Manager - manage releases of CData embedded/OEM drivers.",
         mixinStandardHelpOptions = true,
         versionProvider = RootCommand.VersionProvider.class,
+        // Subcommands inherit -h/-V and the version provider, so '-V' works on
+        // every command instead of being advertised and printing nothing.
+        scope = ScopeType.INHERIT,
         subcommands = {
                 ReleasesCommand.class,
                 ConnectorsCommand.class,

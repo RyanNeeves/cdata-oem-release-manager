@@ -1,6 +1,7 @@
 package com.cdata.releasemanager.cli.commands;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -30,7 +31,6 @@ import picocli.CommandLine.Spec;
 
 @Command(
         name = "download",
-        mixinStandardHelpOptions = true,
         description = "Download driver builds for a release: specific connectors, or the full edition by default.")
 public class DownloadCommand implements Callable<Integer> {
 
@@ -56,7 +56,7 @@ public class DownloadCommand implements Callable<Integer> {
     }
 
     @Option(names = {"-o", "--output"}, defaultValue = ".",
-            description = "Output directory (default: current directory).")
+            description = "Output directory, created if it does not exist (default: current directory).")
     Path output;
 
     @Option(names = {"-p", "--parallel"}, defaultValue = "4",
@@ -129,6 +129,15 @@ public class DownloadCommand implements Callable<Integer> {
     /** Downloads the files on a fixed-size pool, reporting progress and failures. Returns the exit code. */
     private int downloadAll(OemBuildsClient client, Release rel, List<RemoteFile> toDownload)
             throws InterruptedException, ExecutionException {
+        // Create the output directory once, so an unusable -o fails with one
+        // clear message instead of an identical error per file mid-download.
+        try {
+            Files.createDirectories(output);
+        } catch (IOException e) {
+            throw new IllegalArgumentException(
+                    "Cannot create output directory '" + output.toAbsolutePath() + "': " + e.getMessage());
+        }
+
         long totalBytes = toDownload.stream().mapToLong(RemoteFile::size).sum();
         int workers = Math.min(parallel, toDownload.size());
         System.out.printf("Downloading %d file%s (%s) from %s / %s to %s (%d at a time)%n",

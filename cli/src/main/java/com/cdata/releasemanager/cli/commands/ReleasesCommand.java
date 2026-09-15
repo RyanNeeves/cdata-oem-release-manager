@@ -10,7 +10,6 @@ import picocli.CommandLine.Command;
 
 @Command(
         name = "releases",
-        mixinStandardHelpOptions = true,
         description = "List available CData connector releases, newest first.")
 public class ReleasesCommand implements Callable<Integer> {
 

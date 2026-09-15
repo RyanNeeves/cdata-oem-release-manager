@@ -12,7 +12,6 @@ import picocli.CommandLine.Option;
 
 @Command(
         name = "changelog",
-        mixinStandardHelpOptions = true,
         description = "Show changelog entries for a connector since a release, date, or build.")
 public class ChangelogCommand implements Callable<Integer> {
 
